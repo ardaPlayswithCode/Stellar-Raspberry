@@ -1,0 +1,18 @@
+# Ignore local backups and large archives
+Stellar-Rasberry-BACKUP-*/
+Stellar-Rasberry-Technical/
+Stellar-Rasberry/
+*.tar.gz
+*.txt
+.claude/
+*-BACKUP-*/
+*.tar.gz
+.claude/
+# Ignore system and large backup files
+.DS_Store
+.claude/
+Stellar-Rasberry-BACKUP-*/
+Stellar-Rasberry-Technical/
+Stellar-Rasberry/
+*.tar.gz
+*.txt
