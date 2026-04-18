@@ -1,0 +1,253 @@
+{
+  "variable": "V07_Volatility_Context",
+  "type": "STATE",
+  "version": "V1",
+  "architecture": "15-Minute LCM Master Clock (v3.0)",
+  "philosophy": {
+    "role": "Environmental physics — HOW MUCH to trust V01-V06 signals",
+    "no_trainer": true,
+    "no_ic_target": true,
+    "no_harvey_weight": true,
+    "no_labels": true,
+    "no_normalization": "Raw levels only. No z-score, no regime label transforms. Schwert (1989): vol is persistent (AR=0.8994), raw level IS the information."
+  },
+  "sensors": {
+    "global": {
+      "vix_close": {
+        "description": "Raw CBOE VIX daily close — same value for ALL tickers on a given date",
+        "source": "^VIX.parquet from 00_ingest_historical.py",
+        "lookahead_guard": "Intraday resolutions (15min, 1hour) use PREVIOUS day's VIX close via .shift(1). Daily/weekly use same-day close (published at market close).",
+        "research": "Whaley (2000) JPM 26(3): VIX = forward-looking 30-day implied vol. Raw close IS state."
+      }
+    },
+    "local": {
+      "atr_pct": {
+        "description": "Wilder ATR(14) / Close × 100 — per-ticker idiosyncratic volatility",
+        "formula": "atr_pct = wilder_atr(H, L, C, 14) / C × 100",
+        "research": "Ang et al. (2006) JF 61(1): idiosyncratic vol (ATR%) is orthogonal to systematic vol (VIX). Both dimensions needed."
+      },
+      "parkinson_vol": {
+        "description": "Range-based volatility estimator, 2.5-5× more efficient than close-to-close",
+        "formula": "σ = sqrt( mean(ln(H/L)²) / (4·ln2) ) over rolling window",
+        "research": "Parkinson (1980) JBus 53(1): uses intrabar price range, capturing more information per observation."
+      },
+      "atr_expansion_ratios": {
+        "description": "ATR(14) / SMA(ATR, window) — ratio > 1.0 indicates expanding volatility",
+        "windows": {
+          "daily": [
+            20,
+            60,
+            120
+          ],
+          "weekly": [
+            12,
+            26,
+            52
+          ],
+          "15min": [
+            60,
+            120,
+            240
+          ],
+          "1hour": [
+            20,
+            60,
+            120
+          ]
+        },
+        "interpretation": "Compressing (<0.8) → coiled spring. Expanding (>1.2) → regime shift in progress."
+      },
+      "annual_sigma": {
+        "description": "Rolling log-return standard deviation, annualized",
+        "formula": "σ_annual = std(ln(C_t/C_{t-1}), window) × sqrt(bars_per_year)",
+        "annualization_factors": {
+          "daily": 15.875,
+          "weekly": 7.211,
+          "15min": 80.87,
+          "1hour": 40.5
+        }
+      }
+    }
+  },
+  "regime_thresholds": {
+    "vix": {
+      "complacent": {
+        "range": [
+          0,
+          15
+        ],
+        "interpretation": "Adrian & Brunnermeier (2016): low VIX = hidden systemic risk accumulating. Volatility paradox."
+      },
+      "normal": {
+        "range": [
+          15,
+          22
+        ],
+        "interpretation": "Baseline regime. Signals interpreted at face value."
+      },
+      "elevated": {
+        "range": [
+          22,
+          32
+        ],
+        "interpretation": "Risk-off. God Model should compress confidence toward 0.5 neutral."
+      },
+      "extreme": {
+        "range": [
+          32,
+          999
+        ],
+        "interpretation": "Crisis. Squeeze-and-Excitation gate should heavily attenuate all signal confidence."
+      }
+    },
+    "atr_pct": {
+      "compressed": {
+        "range": [
+          0,
+          1
+        ],
+        "interpretation": "Low idiosyncratic vol. Breakout imminent or dead stock."
+      },
+      "normal": {
+        "range": [
+          1,
+          2.5
+        ],
+        "interpretation": "Typical swing range. Signals reliable."
+      },
+      "volatile": {
+        "range": [
+          2.5,
+          5
+        ],
+        "interpretation": "Elevated per-ticker risk. Position sizing should shrink."
+      },
+      "distressed": {
+        "range": [
+          5,
+          999
+        ],
+        "interpretation": "Extreme idiosyncratic event. Signal reliability degraded."
+      }
+    },
+    "expansion_ratio": {
+      "compressing": {
+        "range": [
+          0,
+          0.8
+        ],
+        "interpretation": "Vol declining vs baseline. Coiled spring — watch for breakout."
+      },
+      "stable": {
+        "range": [
+          0.8,
+          1.2
+        ],
+        "interpretation": "Vol near its own average. Normal operating regime."
+      },
+      "expanding": {
+        "range": [
+          1.2,
+          2
+        ],
+        "interpretation": "Vol rising vs baseline. Trend acceleration or regime change."
+      },
+      "exploding": {
+        "range": [
+          2,
+          999
+        ],
+        "interpretation": "Vol spike. Likely news-driven. Reduce exposure."
+      }
+    }
+  },
+  "god_model_integration": {
+    "registry_columns": [
+      "v7_vix_close",
+      "v7_vix_weekly",
+      "v7_atr_pct",
+      "v7_atr_pct_weekly"
+    ],
+    "tabular_indices": [
+      10,
+      11,
+      12,
+      13
+    ],
+    "interaction_constraints": {
+      "G0_SYSTEMATIC": {
+        "members": "CNN[0:59] + v7_vix_close[10,11]",
+        "research": "Ang et al. (2006): VIX gates ALL chart pattern interpretation. Adrian & Brunnermeier (2016): volatility paradox — low VIX may mean hidden risk, not safety.",
+        "mechanism": "VIX level modulates how much to trust CNN visual pattern recognition. High VIX → compress CNN confidence toward uniform prior."
+      },
+      "G1_STRUCTURAL": {
+        "members": "Numerical[0:9] + VIX[10,11] + V8[14:19]",
+        "research": "VIX + range position jointly gate how RSI/MACD/Volume signals are interpreted. A bullish RSI divergence in a VIX=40 environment means something different than in VIX=12.",
+        "mechanism": "XGBoost interaction constraints ensure VIX can modulate numerical signal weights but cannot directly predict returns."
+      },
+      "G2_LOCAL": {
+        "members": "ATR%[12,13] + CNN[0:59] + Numerical[0:9]",
+        "research": "Ang et al. (2006): idiosyncratic vol is orthogonal to systematic. A stock with ATR%=8% in a VIX=15 environment has ticker-specific risk that VIX doesn't capture.",
+        "mechanism": "Per-ticker ATR% gates THAT ticker's own signals. High ATR% → reduce confidence in all signals for that specific ticker."
+      }
+    },
+    "conditional_gating": {
+      "mechanism": "Squeeze-and-Excitation or attention-based recalibration",
+      "behavior": "V07 sensors are NOT fed as raw inputs alongside V01-V06. They recalibrate CNN features BEFORE the decision layer. High-risk regime squeezes confidence toward 0.5 neutral.",
+      "warning": "NEVER conflate V07/V08 with standard numerical variables. They are Ghost/State variables with a fundamentally different role in the architecture."
+    }
+  },
+  "research_citations": [
+    "Whaley (2000) JPM 26(3) — VIX fear gauge, forward-looking implied vol",
+    "Parkinson (1980) JBus 53(1) — Range estimator 2.5-5× more efficient",
+    "Schwert (1989) JF 44(5) — Vol persistent AR=0.8994, no z-score needed",
+    "Ang, Hodrick, Xing & Zhang (2006) JF 61(1) — Systematic ⊥ idiosyncratic",
+    "Adrian & Brunnermeier (2016) AER 106(7) — Volatility paradox: low VIX = hidden risk"
+  ],
+  "output_schema": {
+    "daily": [
+      "datetime",
+      "ticker",
+      "vix_close",
+      "atr_pct",
+      "parkinson_vol",
+      "atr_ratio_20",
+      "atr_ratio_60",
+      "atr_ratio_120",
+      "annual_sigma"
+    ],
+    "weekly": [
+      "datetime",
+      "ticker",
+      "vix_close",
+      "atr_pct",
+      "parkinson_vol",
+      "atr_ratio_12",
+      "atr_ratio_26",
+      "atr_ratio_52",
+      "annual_sigma"
+    ],
+    "15min": [
+      "datetime",
+      "ticker",
+      "vix_close",
+      "atr_pct",
+      "parkinson_vol",
+      "atr_ratio_60",
+      "atr_ratio_120",
+      "atr_ratio_240",
+      "annual_sigma"
+    ],
+    "1hour": [
+      "datetime",
+      "ticker",
+      "vix_close",
+      "atr_pct",
+      "parkinson_vol",
+      "atr_ratio_20",
+      "atr_ratio_60",
+      "atr_ratio_120",
+      "annual_sigma"
+    ]
+  }
+}

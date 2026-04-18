@@ -1,0 +1,149 @@
+{
+  "variable_id": "08_range_context",
+  "variable_type": "STATE_VARIABLE",
+  "version": "V1",
+  "no_standalone_trainer": true,
+  "no_ic_target": true,
+  "no_harvey_weight": true,
+  "primary_output": {
+    "column": "v6_score",
+    "range": [
+      0,
+      1
+    ],
+    "formula": "(close - low_52w) / (high_52w - low_52w)",
+    "lookahead_guard": "shift(1) on rolling H/L"
+  },
+  "tabular_indices": {
+    "v8_v6_score": 14,
+    "v8_bars_since_high": 15,
+    "v8_bars_since_low": 16,
+    "v8_v6_score_weekly": 17,
+    "v8_bars_since_high_weekly": 18,
+    "v8_bars_since_low_weekly": 19
+  },
+  "regime_thresholds": {
+    "v6_score": {
+      "deep_value": {
+        "range": [
+          0,
+          0.15
+        ],
+        "label": "Deep Value",
+        "note": "Kahneman λ=2.25 loss aversion. Bear signals unreliable. Bounce-prone."
+      },
+      "value": {
+        "range": [
+          0.15,
+          0.35
+        ],
+        "label": "Value",
+        "note": "Moderate loss domain. Contrarian tendencies."
+      },
+      "neutral": {
+        "range": [
+          0.35,
+          0.65
+        ],
+        "label": "Neutral",
+        "note": "Standard signal interpretation applies."
+      },
+      "momentum": {
+        "range": [
+          0.65,
+          0.85
+        ],
+        "label": "Momentum",
+        "note": "Grinblatt & Han: disposition effect. Bull signals reliable."
+      },
+      "overextended": {
+        "range": [
+          0.85,
+          1
+        ],
+        "label": "Overextended",
+        "note": "Baker et al: strongest 52w anchor effect. Discontinuous."
+      }
+    },
+    "zscore_sma200": {
+      "deep_discount": {
+        "range": [
+          -5,
+          -2
+        ],
+        "label": "Deep Discount",
+        "note": "Statistically rare. Mean reversion likely."
+      },
+      "discount": {
+        "range": [
+          -2,
+          -1
+        ],
+        "label": "Discount"
+      },
+      "neutral": {
+        "range": [
+          -1,
+          1
+        ],
+        "label": "Fair Value"
+      },
+      "premium": {
+        "range": [
+          1,
+          2
+        ],
+        "label": "Premium"
+      },
+      "extreme_premium": {
+        "range": [
+          2,
+          5
+        ],
+        "label": "Extreme Premium",
+        "note": "Statistically rare. Correction risk elevated."
+      }
+    },
+    "range_percentile": {
+      "compressed": {
+        "range": [
+          0,
+          20
+        ],
+        "label": "Compressed",
+        "note": "Bollinger squeeze analog. Breakout imminent."
+      },
+      "normal": {
+        "range": [
+          20,
+          80
+        ],
+        "label": "Normal"
+      },
+      "expanded": {
+        "range": [
+          80,
+          100
+        ],
+        "label": "Expanded",
+        "note": "High-volatility bars. Exhaustion or continuation."
+      }
+    }
+  },
+  "interaction_constraints": {
+    "group_1_structural": "v8 features in Group 1 — interact with V4-V6 numerical signals",
+    "bias_shift_examples": {
+      "RSI_70_at_52w_high": "Momentum continuation, NOT exhaustion",
+      "RSI_70_at_midpoint": "Ambiguous — no directional context",
+      "RSI_30_at_52w_low": "Bounce signal — do NOT short (Huddart: buy-side imbalance)",
+      "MACD_bull_deep_value": "Countertrend bounce — lower conviction",
+      "MACD_bull_momentum": "Trend confirmation — higher conviction"
+    }
+  },
+  "research": {
+    "Huddart_et_al_2009": "LHIGH/LLOW staleness. Coeff 0.0028/week. Threshold effect at extremes only.",
+    "Grinblatt_Han_2005": "v6_score proxies capital gains overhang. Subsumes momentum.",
+    "Kahneman_Tversky_1979": "λ=2.25 loss aversion. Low zone ≠ high zone in behavioral intensity.",
+    "Baker_et_al_2012": "52w high = purely psychological. Piecewise. Discontinuous at threshold."
+  }
+}
